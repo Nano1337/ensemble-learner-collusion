@@ -1,10 +1,10 @@
 # Ensemble Learner Collusion
 
-Reproducing issues in the (paper)[https://arxiv.org]. 
+Reproducing issues in the paper "(Joint Training of Deep Ensembles Fails due to Learner Collusion)[https://arxiv.org/abs/2301.11323]" 
 
 Briefly, there seems to be some sort of diversity term that controls the exact difference between the performance of a jointly learned ensemble vs individual learners with individual loss functions of which predictions are ensembled afterwards. Consistently, we see that individual learners perform better than joint ensembles and that different types of models that are trained through a joint optimization scheme achieve different levels of performance on various benchmark datasets (e.g. ImageNet, CIFAR, etc.). 
 
-This preliminary reproduction of the CIFAR results presented in the paper above will serve as an initial investigation into this phenomenon and possible fixes. My hypothesis is that spectral norms for weight init and updates from Greg at xAI may alleviate some of the issues behind training here.
+This preliminary reproduction of the CIFAR results presented in the paper above will serve as an initial investigation into this phenomenon and possible fixes. My hypothesis is that spectral norms for weight init and updates from "(A Spectral Condition for Feature Learning[https://arxiv.org/abs/2310.17813])" by Greg at xAI may alleviate some of the issues behind training here.
 
 ## Setting up
 
