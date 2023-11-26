@@ -64,10 +64,8 @@ def train_model(model_ensemble, train_loader, optimizer, criterion, epoch):
     model_ensemble.train()
     loop = tqdm(train_loader, leave=True)
     for data, target in loop:
-        print(data.shape)
-        exit()
         data, target = data.to('cuda'), target.to('cuda')
-        loop.set_description(f'Epoch [{epoch+1}/{epoch}]')
+        loop.set_description(f'Epoch [{epoch+1}/{80}]')
         optimizer.zero_grad()
         output = model_ensemble(data)
         loss = criterion(output, target)
@@ -100,7 +98,7 @@ def validate_model(model_ensemble, val_loader, criterion):
     val_loss /= len(val_loader.dataset)
     accuracy = 100. * correct / len(val_loader.dataset)
     print(f'Validation set: Average loss: {val_loss:.4f}, Accuracy: {correct}/{len(val_loader.dataset)} ({accuracy:.0f}%)')
-
+7
 class ModelClass(nn.Module):
     def __init__(self):
         super().__init__()
@@ -121,6 +119,22 @@ class ModelClass(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+    
+class ModelEnsemble(nn.Module): 
+    def __init__(self, num_models): 
+        super().__init__() 
+        self.num_models = num_models 
+        self.models = nn.ModuleList([ModelClass() for _ in range(num_models)]) 
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        parallel_outputs = [model(x) for model in self.models]
+        softmax_outputs = [self.softmax(output) for output in parallel_outputs]
+
+        # Average the softmax probabilities
+        avg_output = torch.mean(torch.stack(softmax_outputs), dim=0)
+        return avg_output
+
 
 # Main function
 def main(num_models=3):
@@ -132,29 +146,7 @@ def main(num_models=3):
     """
     train_loader, val_loader = get_data_loaders()
 
-
-    # input shape is [128, 3, 32, 32]
-    # output shape is [128, 10]
-
-    # Assuming your ModelClassWrapper accepts (128, 3, 32, 32) shaped input
-    data = torch.randn(128, 3, 32, 32).to('cuda')
-
-    # Initialize your models
-    models = [ModelClass().to('cuda') for _ in range(num_models)]
-
-    # Copy a single model and put it on the meta device
-    base_model = copy.deepcopy(models[0]).to('meta')
-
-    # Stack the parameters and buffers of all models
-    params, buffers = torch.func.stack_module_state(models)
-
-    # Function to call a single model
-    def call_single_model(params, buffers, data):
-        return torch.func.functional_call(base_model, (params, buffers), (data,))
-
-    # Apply the vmap with same minibatch for all models
-    model_ensemble = torch.vmap(call_single_model, (0, 0, None))(params, buffers, data)
-    print("Model ensemble shape", model_ensemble.shape) # [num_models, 128, 10]
+    model_ensemble = ModelEnsemble(num_models).to('cuda')
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model_ensemble.parameters(), lr=0.001, weight_decay=5e-4)
@@ -167,4 +159,4 @@ def main(num_models=3):
             scheduler.step()
 
 if __name__ == "__main__":
-    main(num_models=5)  # Change this value to set the number of models in the ensemble
+    main(num_models=1)  # Change this value to set the number of models in the ensemble
