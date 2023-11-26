@@ -6,8 +6,12 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import tqdm
 from einops.layers.torch import Rearrange
+from einops import rearrange
+
 import mup
-from mup import MuReadout, MuAdam
+from mup import MuReadout, MuAdam, get_shapes, make_base_shapes, set_base_shapes
+
+import pickle
 
 # Prepare the CIFAR-10 dataset
 def get_data_loaders(batch_size=128, augment=True):
@@ -47,7 +51,7 @@ def get_data_loaders(batch_size=128, augment=True):
     return train_loader, val_loader
 
 # Training loop
-def train_model(model_ensemble, train_loader, optimizers, criterions, epoch):
+def train_model(model_ensemble, train_loader, optimizer, criterion, epoch):
     """
     Trains the model ensemble.
 
@@ -64,17 +68,11 @@ def train_model(model_ensemble, train_loader, optimizers, criterions, epoch):
     for data, target in loop:
         data, target = data.to('cuda'), target.to('cuda')
         loop.set_description(f'Epoch [{epoch+1}/{80}]')
-        for optimizer in optimizers: 
-            optimizer.zero_grad() 
-        outputs = model_ensemble(data)
-        losses = [criterion(output, target) for criterion, output in zip(criterions, outputs)]
-        for loss in losses: 
-            loss.backward()
-        for optimizer in optimizers:
-            optimizer.step()
-
-        # average outputs for inference
-        output = torch.stack(outputs).mean(0)
+        optimizer.zero_grad()
+        output = model_ensemble(data)
+        loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
         acc = (output.argmax(dim=1) == target).float().mean()
         loop.set_postfix(loss=loss.item(), accuracy=round(acc.item()*100, 4))
 
@@ -89,88 +87,81 @@ def validate_model(model_ensemble, val_loader, criterion):
         criterion (Loss): Loss function for validation.
     """
     model_ensemble.eval()
+    val_loss = 0
     correct = 0
     with torch.no_grad():
         for data, target in tqdm(val_loader, desc='Validating', leave=True):            
             data, target = data.to('cuda'), target.to('cuda')
             output = model_ensemble(data)
-            output = torch.stack(output).mean(0)
+            val_loss += criterion(output, target).item()
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
 
+    val_loss /= len(val_loader.dataset)
     accuracy = 100. * correct / len(val_loader.dataset)
-    print(f'Validation set: Accuracy: {correct}/{len(val_loader.dataset)} ({accuracy:.0f}%)')
-7
+    print(f'Validation set: Average loss: {val_loss:.4f}, Accuracy: {correct}/{len(val_loader.dataset)} ({accuracy:.0f}%)')
+
 class ModelClass(nn.Module):
-    def __init__(self):
+    def __init__(self, width=120): # try 130 as alternative
         super().__init__()
-        self.model = nn.Sequential(
-            nn.Conv2d(3, 6, 5), 
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2), 
-            nn.Conv2d(6, 16, 5), 
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            Rearrange('b c h w -> b (c h w)'), # Flatten
-            nn.Linear(16 * 5 * 5, 120),
-            nn.ReLU(),
-            nn.Linear(120, 84),
-            nn.ReLU(),
-            MuReadout(84, 10),
-        ).to('cuda')
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.maxpool = nn.MaxPool2d(2, 2)
+        self.relu = nn.ReLU()
+        self.fc1 = nn.Linear(16 * 5 * 5, width)
+        self.fc2 = nn.Linear(width, int(width*0.7))
+        self.fc3 = MuReadout(int(width*0.7), 10)
 
     def forward(self, x):
-        return self.model(x)
-    
-
-def _init_weights(m):
-    if isinstance(m, nn.Linear):
-        mup.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-        nn.init.zeros_(m.bias)
-    elif isinstance(m, nn.Conv2d):
-        mup.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-        nn.init.zeros_(m.bias)
-    elif isinstance(m, MuReadout):
-        mup.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-        nn.init.zeros_(m.bias)
+        x = self.maxpool(self.relu(self.conv1(x)))
+        x = self.maxpool(self.relu(self.conv2(x)))
+        x = rearrange(x, 'b c h w -> b (c h w)')
+        return self.fc3(self.relu(self.fc2(self.relu(self.fc1(x)))))
 
 class ModelEnsemble(nn.Module): 
     def __init__(self, num_models): 
         super().__init__() 
         self.num_models = num_models 
-        self.models = nn.ModuleList([ModelClass() for _ in range(num_models)]) 
-        for model in self.models: 
-            model.apply(_init_weights)
+
+        models = []
+
+        for i in range(num_models): 
+            model = ModelClass()
+            set_base_shapes(model, 'single_base.bsh')
+            models.append(model)
+
+        self.models = nn.ModuleList(models) 
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         parallel_outputs = [model(x) for model in self.models]
         softmax_outputs = [self.softmax(output) for output in parallel_outputs]
-        return softmax_outputs
 
+        # Average the softmax probabilities
+        avg_output = torch.mean(torch.stack(softmax_outputs), dim=0)
+        return avg_output
+
+
+def save_base_shapes(model, save_path):
+    base_shapes = get_shapes(model)
+    delta_shapes = get_shapes(ModelClass(width=130))  # Create another instance for delta shapes
+    make_base_shapes(base_shapes, delta_shapes, savefile=save_path)
 
 # Main function
 def main(num_models=3):
-    """
-    Main function to execute the training and validation process.
-
-    Args:
-        num_models (int): Number of models in the ensemble.
-    """
     train_loader, val_loader = get_data_loaders()
 
     model_ensemble = ModelEnsemble(num_models).to('cuda')
 
-    criterions = [nn.CrossEntropyLoss()] * num_models
-    optimizers = [MuAdam(model_ensemble.parameters(), lr=0.001, weight_decay=5e-4)] * num_models
-    schedulers = [ExponentialLR(optimizer, gamma=0.2) for optimizer in optimizers] 
+    criterion = nn.CrossEntropyLoss()
+    optimizer = MuAdam(model_ensemble.parameters(), lr=0.001, weight_decay=5e-4)
+    scheduler = ExponentialLR(optimizer, gamma=0.2)
 
     for epoch in range(80):
-        train_model(model_ensemble, train_loader, optimizers, criterions, epoch)
-        validate_model(model_ensemble, val_loader, criterions)
+        train_model(model_ensemble, train_loader, optimizer, criterion, epoch)
+        validate_model(model_ensemble, val_loader, criterion)
         if epoch in [29, 49, 69]:
-            for scheduler in schedulers: 
-                scheduler.step()
+            scheduler.step()
 
 if __name__ == "__main__":
-    main(num_models=1)  # Change this value to set the number of models in the ensemble
+    main(num_models=3)  # Change this value to set the number of models in the ensemble
