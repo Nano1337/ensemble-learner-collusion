@@ -1,6 +1,6 @@
 # Ensemble Learner Collusion
 
-Reproducing issues in the paper "[Joint Training of Deep Ensembles Fails due to Learner Collusion](https://arxiv.org/abs/2301.11323)" 
+Reproducing issues in the paper "[Joint Training of Deep Ensembles Fails due to Learner Collusion](https://arxiv.org/abs/2301.11323)" However, also take a look at the opposite findings about ensembles in this paper "[PEP: Paramter Ensembling by Perturbation](https://proceedings.neurips.cc/paper_files/paper/2020/file/652c208b21f13f6e995bfc1154a1a2e5-Paper.pdf)"
 
 Briefly, there seems to be some sort of diversity term that controls the exact difference between the performance of a jointly learned ensemble vs individual learners with individual loss functions of which predictions are ensembled afterwards. Consistently, we see that individual learners perform better than joint ensembles and that different types of models that are trained through a joint optimization scheme achieve different levels of performance on various benchmark datasets (e.g. ImageNet, CIFAR, etc.). 
 
@@ -26,8 +26,6 @@ pip install -r requirements.txt
 ```
 
 # Results so far: 
-Note: results reported are for 1 run with uncontrolled seed. 
-
 For validation after 80 epochs
 Training 1 model: 64% acc, train loss 1.83
 Training 3 models with fusion: acc 59%, train loss ???
