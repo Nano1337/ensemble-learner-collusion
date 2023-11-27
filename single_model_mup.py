@@ -131,7 +131,7 @@ def validate_model(model_ensemble, val_loader, criterion):
     print(f'Validation set: Accuracy: {correct}/{len(val_loader.dataset)} ({accuracy:.0f}%)')
 
 class ModelClass(nn.Module):
-    def __init__(self, width=120): # try 130 as alternative
+    def __init__(self, width=120):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.conv2 = nn.Conv2d(6, 16, 5)

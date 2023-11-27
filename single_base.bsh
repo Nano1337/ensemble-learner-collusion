@@ -1,32 +1,32 @@
 # This is a base shape file encoded in yaml
 # - `null` indicates a dimension is "finite", i.e. a non-"width" dimension
 # - a number indicates the base dimension of an "infinite" dimension, i.e. some notion of "width"
-conv1.bias:
+classifier.bias:
 - null
-conv1.weight:
-- null
-- null
-- null
-- null
-conv2.bias:
-- null
-conv2.weight:
-- null
-- null
-- null
-- null
-fc1.bias:
-- 120
-fc1.weight:
-- 120
-- null
-fc2.bias:
-- 60
-fc2.weight:
-- 60
-- 120
-fc3.bias:
-- null
-fc3.weight:
+classifier.weight:
 - null
 - 60
+models.0.0.bias:
+- null
+models.0.0.weight:
+- null
+- null
+- null
+- null
+models.0.3.bias:
+- null
+models.0.3.weight:
+- null
+- null
+- null
+- null
+models.0.7.bias:
+- 120
+models.0.7.weight:
+- 120
+- null
+models.0.9.bias:
+- 60
+models.0.9.weight:
+- 60
+- 120

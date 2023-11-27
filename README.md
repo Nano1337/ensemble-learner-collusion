@@ -39,8 +39,13 @@ Note: network was change to width*0.5 instead of 0.7, will need to retrain basel
 
 # Same settings but with muP: 
 For validation after 80 epochs: 
-training 1 model: acc 69%, train loss 0.082
-training 3 models with fusion: acc 61%, train loss 1.88
+training 1 model: acc 69%, train loss 0.826
+training 5 models with shared classifier head -> avg logits -> softmax:
+                : acc 61%, train loss 1.88
+same but avg after softmax instead: acc 63%, train loss 1.88, seems within margin of error
+
+
+
 
 Other observations: seems like it converged much faster? Like within half the time. Doesn't seem to fix the ensembling problem - I think it mostly has to do with the way the probabilities are directly averaged, definitely has negative effects. Seems like train loss settles at about the same place but I think this is a good starting research problem: Investigate how to scale model ensembles correctly which feeds into scaling modalities
 
